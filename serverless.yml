@@ -1,0 +1,129 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: contentixdemo
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: document-manager
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: documan
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "dynamodb:Query"
+            - "dynamodb:GetItem"
+            - "dynamodb:PutItem"
+            - "dynamodb:Get*"
+            - "dynamodb:Scan*"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+            - "dynamodb:BatchWriteItem"
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:service}-folderDocumentsTable-${sls:stage}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:service}-folderDocumentsTable-${sls:stage}/index/DocumentIndex
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:service}-usersTable-${sls:stage}
+
+  environment:
+    PERMIT_PDP_URL: ${env:PERMIT_PDP_URL}
+    PERMIT_SDK_TOKEN: ${env:PERMIT_SDK_TOKEN}
+    FOLDER_DOCUMENTS_TABLE: ${self:service}-folderDocumentsTable-${sls:stage}
+    USERS_TABLE: ${self:service}-usersTable-${sls:stage}
+
+functions:
+  register:
+    handler: src/auth/register.handler
+    events:
+      - http:
+          path: /auth/register
+          method: post
+          cors: true
+
+  login:
+    handler: src/auth/login.handler
+    events:
+      - http:
+          path: /auth/login
+          method: post
+          cors: true
+
+  authorizer:
+    handler: src/auth/authorizer.handler
+
+  createfolder:
+    handler: src/handlers/createfolder.createfolder
+    events:
+      - http:
+          path: /folders
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: TOKEN
+
+  createdocument:
+    handler: src/handlers/createdocument.createDocument
+    events:
+      - http:
+          path: /document
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            type: TOKEN
+
+  getDocument:
+    handler: src/handlers/getdocument.getDocument
+    events:
+      - http:
+          path: /documents/{id}
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            type: TOKEN
+
+resources:
+  Resources:
+    FolderDocumentsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-folderDocumentsTable-${sls:stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: DocumentIndex
+            KeySchema:
+              - AttributeName: SK
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        SSESpecification:
+          SSEEnabled: true
+
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-usersTable-${sls:stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        SSESpecification:
+          SSEEnabled: true
